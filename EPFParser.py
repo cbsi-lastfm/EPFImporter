@@ -251,7 +251,7 @@ class Parser(object):
             #replace empty strings with NULL
             for i in range(len(rec)):
                 val = rec[i]
-                rec[i] = ("NULL" if val == "" else val)
+                rec[i] = (None if val == "" else val)
 
             #massage dates into MySQL-compatible format.
             #most date values look like '2009 06 21'; some are '2005-09-06-00:00:00-Etc/GMT'
