@@ -145,7 +145,7 @@ class Parser(object):
         #Convert any datatypes to mapped counterparts, and cache indexes of date/time types and number types
         for j in range(len(self.dataTypes)):
             dType = self.dataTypes[j]
-            if self.dataTypeMap.has_key(dType):
+            if dType in self.dataTypeMap:
                 self.dataTypes[j] = self.dataTypeMap[dType]
             if dType in self.dateTypes:
                 self.dateColumns.append(j)
@@ -202,10 +202,9 @@ class Parser(object):
         lst = []
         isFirstLine = True
         while (True):
-            ln = self.eFile.readline()
+            ln = self.eFile.readline().decode("utf-8")
             if (not ln): #end of file
                 break
-            ln = unicode(ln, 'utf-8')
             if (isFirstLine and ignoreComments and ln.find(self.commentChar) == 0): #comment
                 continue
             lst.append(ln)
@@ -226,7 +225,7 @@ class Parser(object):
         This allows much faster access to a record in the middle of the file.
         """
         while (True):
-            ln = self.eFile.readline()
+            ln = self.eFile.readline().decode("utf-8")
             if (not ln): #end of file
                 return
             if (ln.find(self.commentChar) == 0): #comment; always skip
@@ -276,7 +275,7 @@ class Parser(object):
             for j in self.dateColumns:
                 rec[j] = rec[j].strip().replace(" ", "-")[:19] #Include at most the first 19 chars
                 if yearMatch.match(rec[j]):
-                     rec[j] = "%s-01-01" % rec[j]
+                    rec[j] = "%s-01-01" % rec[j]
             return rec
         else:
             return None

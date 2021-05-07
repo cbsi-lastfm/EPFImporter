@@ -47,6 +47,7 @@ DATETIME_FORMAT = "%y-%m-%d %H:%M:%S"
 
 LOGGER = logging.getLogger()
 
+
 class Ingester(object):
     """
     Used to ingest an EPF file into a MySQL database.
@@ -376,7 +377,7 @@ class Ingester(object):
             if self.isMysql:
                 escRec = [conn.literal(aField) for aField in aRec]
             else:
-                escRec = [cur.mogrify("%s", (aField,)) for aField in aRec]
+                escRec = [cur.mogrify("%s", (aField,)).decode("utf-8") for aField in aRec]
             escapedRecords.append(escRec)
         return escapedRecords
 
@@ -422,7 +423,7 @@ class Ingester(object):
             stringList = ["(%s)" % (", ".join(aRecord)) for aRecord in escapedRecords]
 
             cur = conn.cursor()
-            colVals = unicode(", ".join(stringList), 'utf-8')
+            colVals = ", ".join(stringList)
             exStr = exStrTemplate % (commandString, ignoreString, tableName, colNamesStr, colVals)
 
             try:

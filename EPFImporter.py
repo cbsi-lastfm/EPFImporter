@@ -49,7 +49,7 @@ except ImportError:
     import simplejson as json
 import copy
 import optparse
-import ConfigParser
+import configparser
 import logging.config
 import errno
 
@@ -85,7 +85,7 @@ logging.logging = logging
 LOGGER_CONFIG_PATH = "./EPFLogger.conf"
 if not os.path.exists(LOGGER_CONFIG_PATH):
     #If the logging config file is missing, create one
-    conf = ConfigParser.RawConfigParser()
+    conf = configparser.RawConfigParser()
     conf.add_section("formatter_simpleFormatter")
     conf.set("formatter_simpleFormatter", "datefmt", "")
     conf.set("formatter_simpleFormatter", "format", "%(asctime)s [%(levelname)s]: %(message)s")
@@ -381,7 +381,7 @@ def main():
     #For each entry which is None, replace it with the value from the config file
     optDict = options.__dict__
     for aKey in optDict.keys():
-        if (not optDict[aKey]) and (configDict.has_key(aKey)):
+        if not optDict[aKey] and aKey in configDict:
             optDict[aKey] = configDict[aKey]
 
     failedFilesDict = {}
