@@ -4,3 +4,4 @@ EPFSnapshot.json
 *.pyc
 /EPFImporter.egg-info/
 /dist/
+/__pycache__/
