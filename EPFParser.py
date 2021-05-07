@@ -263,7 +263,7 @@ class Parser(object):
             rec = rec[:len(self.columnNames)] #if there are more data records than column names,
             #trim any surplus records via a slice
 
-            #replace empty strings with NULL
+            #replace empty strings with None
             for i in range(len(rec)):
                 val = rec[i]
                 rec[i] = (None if val == "" else val)
