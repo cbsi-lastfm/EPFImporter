@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # Copyright (c) 2010 Apple  Inc. All rights reserved.
 
 # IMPORTANT:  This Apple software is supplied to you by Apple Inc. ("Apple") in
