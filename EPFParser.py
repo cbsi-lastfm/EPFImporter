@@ -38,6 +38,7 @@
 import os
 import re
 import logging
+import tarfile
 
 LOGGER = logging.getLogger()
 
@@ -45,6 +46,12 @@ LOGGER = logging.getLogger()
 class SubstringNotFoundException(Exception):
     """
     Exception thrown when a comment character or other tag is not found in a situation where it's required.
+    """
+
+
+class WrongNumberOfDataFilesInTBZ(Exception):
+    """
+    Exception thrown when there is either none or more than one file in a tbz archive.
     """
 
 
@@ -86,14 +93,23 @@ class Parser(object):
         self.recordDelim = recordDelim
         self.fieldDelim = fieldDelim
 
-        self.eFile = open(filePath, mode="rU") #this will throw an exception if filePath does not exist
+        archive = tarfile.open(filePath, 'r:bz2')
+        members = archive.getmembers()
+        if len(members) != 1:
+            message = "Archive {} has {} files".format(filePath, len(members))
+            raise WrongNumberOfDataFilesInTBZ(message)
 
+        self.eFile = archive.extractfile(members[0]) # get the file from the archive for given tarinfo
+
+        LOGGER.info("Getting number of records in %s", members[0].name)
         #Seek to the end and parse the recordsWritten line
-        self.eFile.seek(-40, os.SEEK_END)
-        str = self.eFile.read() #reads from -40 to end of file
-        lst = str.split(self.commentChar + Parser.recordCountTag)
-        numStr = lst.pop().rpartition(self.recordDelim)[0]
-        self.recordsExpected = int(numStr)
+        lastLine = ""
+        for line in self.eFile:
+            lastLine = line
+        lastLine = lastLine.decode("utf-8")
+        match = re.search(self.commentChar + Parser.recordCountTag + '(.+?)\x02\n', lastLine)
+        self.recordsExpected = int(match.group(1))
+
         self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
         #Extract the column names
         line1 = self.nextRowString(ignoreComments=False)
