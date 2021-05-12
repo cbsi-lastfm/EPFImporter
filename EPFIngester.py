@@ -303,12 +303,13 @@ class Ingester(object):
         cur = conn.cursor()
 
         if self.isPostgresql:
-            exStr = """SELECT COUNT(column_name) FROM information_schema.columns WHERE table_name = '%s'""" % tableName
+            exStr = """SELECT column_name, data_type, character_maximum_length FROM information_schema.columns 
+                            WHERE table_name = '%s'""" % tableName
         else:
             exStr = """SHOW COLUMNS FROM %s""" % tableName
 
-        colCount = cur.execute(exStr) #cur.execute() returns the number of rows,
-        # which for SHOW COLUMNS is the number of columns in the table
+        cur.execute(exStr)
+        colCount = len(cur.fetchall())
         cur.close()
         if not connection:
             conn.close()
@@ -498,11 +499,13 @@ class Ingester(object):
             cur.execute(exStr % ("TABLE", targetTable, targetOld))
             if self.isPostgresql:
                 cur.execute(exStr % ("INDEX", targetTable+'_pk', targetOld+'_pk'))
+                conn.commit()
         #now rename the new table to replace the old table
         try:
             cur.execute(exStr % ("TABLE", sourceTable, targetTable))
             if self.isPostgresql:
                 cur.execute(exStr % ("INDEX", sourceTable+'_pk', targetTable+'_pk'))
+                conn.commit()
         except MySQLdb.Error as e:
             LOGGER.error("Error %d: %s", e.args[0], e.args[1])
             revert = True
@@ -516,6 +519,7 @@ class Ingester(object):
                 cur.execute(exStr % ("TABLE", targetOld, targetTable))
                 if self.isPostgresql:
                     cur.execute(exStr % ("INDEX", targetOld+'_pk', targetTable+'_pk'))
+                    conn.commit()
         #Drop sourceTable so it's not hanging around
         #drop the old table
         cur.execute("""DROP TABLE IF EXISTS %s""" % targetOld)
