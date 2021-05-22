@@ -273,9 +273,10 @@ class Parser(object):
             #there are also some cases where there's only a year; we'll pad it out with a bogus month/day
             yearMatch = re.compile(r"^\d\d\d\d$")
             for j in self.dateColumns:
-                rec[j] = rec[j].strip().replace(" ", "-")[:19] #Include at most the first 19 chars
-                if yearMatch.match(rec[j]):
-                    rec[j] = "%s-01-01" % rec[j]
+                if rec[j]:
+                    rec[j] = rec[j].strip().replace(" ", "-")[:19] #Include at most the first 19 chars
+                    if yearMatch.match(rec[j]):
+                        rec[j] = "%s-01-01" % rec[j]
             return rec
         else:
             return None
