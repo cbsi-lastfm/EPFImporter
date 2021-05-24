@@ -74,9 +74,11 @@ class Ingester(object):
         """
         self.filePath = filePath
         self.fileName = os.path.basename(filePath)
-        pref = ("%s_" % tablePrefix if tablePrefix else "")
-        self.tableName = (pref + self.fileName).replace("-", "_") #hyphens aren't allowed in table names
+        self.tableName = self.fileName.replace("-", "_") #hyphens aren't allowed in table names
         self.tableName = self.tableName.split(".")[0]
+        pref = (tablePrefix if tablePrefix else "")
+        pref = ("%s_" % pref if len(pref) and pref[:-1] != ".") #add _ separator to prefix unless it's is a schema
+        self.tableName = (pref + self.tableName)
         self.tmpTableName = self.tableName + "_tmp"
         self.incTableName = self.tableName + "_inc" #used during incremental ingests
         self.unionTableName = self.tableName + "_un" #used during incremental ingests
