@@ -82,6 +82,10 @@ class Ingester(object):
             # add _ separator to prefix unless the prefix is a schema or empty
             pref = ("%s_" % tablePrefix if len(tablePrefix) and tablePrefix[-1] != "." else tablePrefix)
 
+        if pref.split(".")[0] != pref:
+            # looks like there's a schema.
+            self.tableSchema, pref = pref.split(".")
+
         self.tableName = (pref + self.tableName)
         self.tmpTableName = self.tableName + "_tmp"
         self.incTableName = self.tableName + "_inc" #used during incremental ingests
@@ -252,7 +256,9 @@ class Ingester(object):
                 host=self.dbHost,
                 user=self.dbUser,
                 password=self.dbPassword,
-                database=self.dbName)
+                database=self.dbName,
+                options=("-c search_path=%s" % self.tableSchema if self.tableSchema else None)
+            )
         else:
             conn = MySQLdb.connect(
                 charset='utf8',
