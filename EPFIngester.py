@@ -80,7 +80,7 @@ class Ingester(object):
         pref = ""
         if tablePrefix:
             # add _ separator to prefix unless the prefix is a schema or empty
-            pref = ("%s_" % tablePrefix if len(tablePrefix) and tablePrefix[:-1] != "." else tablePrefix)
+            pref = ("%s_" % tablePrefix if len(tablePrefix) and tablePrefix[-1] != "." else tablePrefix)
 
         self.tableName = (pref + self.tableName)
         self.tmpTableName = self.tableName + "_tmp"
