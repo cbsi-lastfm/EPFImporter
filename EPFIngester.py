@@ -416,7 +416,7 @@ class Ingester(object):
             #By default, we concatenate 200 inserts into a single INSERT statement.
             #a large batch size per insert improves performance, until you start hitting max_packet_size issues.
             #If you increase MySQL server's max_packet_size, you may get increased performance by increasing maxNum
-            records = self.parser.nextRecords(maxNum=5000)
+            records = self.parser.nextRecords(maxNum=10000)
             if (not records):
                 break
 
