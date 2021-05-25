@@ -93,6 +93,7 @@ class Parser(object):
         self.recordDelim = recordDelim
         self.fieldDelim = fieldDelim
 
+        # TODO: we need async-files here to make tarfile async
         archive = tarfile.open(filePath, 'r:bz2')
         members = archive.getmembers()
         if len(members) != 1:
@@ -101,6 +102,8 @@ class Parser(object):
 
         self.eFile = archive.extractfile(members[0]) # get the file from the archive for given tarinfo
 
+        # TODO: this is ONLY used to determine whether to use a direct update, or a prune-and-merge
+        #       therefore we should just guess it based on the file size.
         LOGGER.info("Getting number of records in %s", members[0].name)
         #Seek to the end and parse the recordsWritten line
         lastLine = ""
@@ -111,6 +114,8 @@ class Parser(object):
         self.recordsExpected = int(match.group(1))
 
         self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
+        # TODO: end TODO
+
         #Extract the column names
         line1 = self.nextRowString(ignoreComments=False)
         self.columnNames = self.splitRow(line1, requiredPrefix=self.commentChar)

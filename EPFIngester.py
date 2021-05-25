@@ -74,9 +74,20 @@ class Ingester(object):
         """
         self.filePath = filePath
         self.fileName = os.path.basename(filePath)
-        pref = ("%s_" % tablePrefix if tablePrefix else "")
-        self.tableName = (pref + self.fileName).replace("-", "_") #hyphens aren't allowed in table names
+        self.tableName = self.fileName.replace("-", "_") #hyphens aren't allowed in table names
         self.tableName = self.tableName.split(".")[0]
+
+        pref = ""
+        if tablePrefix:
+            # add _ separator to prefix unless the prefix is a schema or empty
+            pref = ("%s_" % tablePrefix if len(tablePrefix) and tablePrefix[-1] != "." else tablePrefix)
+
+        self.tableSchema = None
+        if "." in pref:
+            # looks like there's a schema.
+            self.tableSchema, pref = pref.split(".")
+
+        self.tableName = (pref + self.tableName)
         self.tmpTableName = self.tableName + "_tmp"
         self.incTableName = self.tableName + "_inc" #used during incremental ingests
         self.unionTableName = self.tableName + "_un" #used during incremental ingests
@@ -246,7 +257,9 @@ class Ingester(object):
                 host=self.dbHost,
                 user=self.dbUser,
                 password=self.dbPassword,
-                database=self.dbName)
+                database=self.dbName,
+                options=("-c search_path=%s" % self.tableSchema if self.tableSchema else None)
+            )
         else:
             conn = MySQLdb.connect(
                 charset='utf8',
@@ -416,7 +429,7 @@ class Ingester(object):
             #By default, we concatenate 200 inserts into a single INSERT statement.
             #a large batch size per insert improves performance, until you start hitting max_packet_size issues.
             #If you increase MySQL server's max_packet_size, you may get increased performance by increasing maxNum
-            records = self.parser.nextRecords(maxNum=5000)
+            records = self.parser.nextRecords(maxNum=10000)
             if (not records):
                 break
 
