@@ -102,19 +102,12 @@ class Parser(object):
 
         self.eFile = archive.extractfile(members[0]) # get the file from the archive for given tarinfo
 
-        # TODO: this is ONLY used to determine whether to use a direct update, or a prune-and-merge
-        #       therefore we should just guess it based on the file size.
-        LOGGER.info("Getting number of records in %s", members[0].name)
-        #Seek to the end and parse the recordsWritten line
-        lastLine = ""
-        for line in self.eFile:
-            lastLine = line
-        lastLine = lastLine.decode("utf-8")
-        match = re.search(self.commentChar + Parser.recordCountTag + '(.+?)\x02\n', lastLine)
-        self.recordsExpected = int(match.group(1))
+        self.fileSize = os.path.getsize(filePath)
 
-        self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
-        # TODO: end TODO
+        # An exact record count exists in the last row of the file, but that would involve extracting the entire tarfile
+        # first - something we want to avoid. So, instead, we just guess based on the input file size. This is ONLY used
+        # to determine the ingestion strategy, not for anything else.
+        self.recordsExpected = 499_999 if self.fileSize < 10_000_000 else 500_001
 
         #Extract the column names
         line1 = self.nextRowString(ignoreComments=False)
