@@ -82,7 +82,8 @@ class Ingester(object):
             # add _ separator to prefix unless the prefix is a schema or empty
             pref = ("%s_" % tablePrefix if len(tablePrefix) and tablePrefix[-1] != "." else tablePrefix)
 
-        if pref.split(".")[0] != pref:
+        self.tableSchema = None
+        if "." in pref:
             # looks like there's a schema.
             self.tableSchema, pref = pref.split(".")
 
