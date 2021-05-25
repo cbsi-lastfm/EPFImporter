@@ -142,7 +142,7 @@ class Ingester(object):
         2. Populate the new table
         3. Drop the old table and rename the new one
         """
-        LOGGER.info("Beginning full ingest of %s (%i records)", self.tableName, self.parser.recordsExpected)
+        LOGGER.info("Beginning full ingest of %s (%i bytes)", self.tableName, self.parser.fileSize)
         self.startTime = datetime.datetime.now()
         try:
             self._createTable(self.tmpTableName)
@@ -165,7 +165,7 @@ class Ingester(object):
         """
         Resume an interrupted full ingest, continuing from fromRecord.
         """
-        LOGGER.info("Resuming full ingest of %s (%i records)", self.tableName, self.parser.recordsExpected)
+        LOGGER.info("Resuming full ingest of %s (%i bytes)", self.tableName, self.parser.fileSize)
         self.lastRecordIngested = fromRecord - 1
         self.startTime = datetime.datetime.now()
         try:
@@ -210,7 +210,7 @@ class Ingester(object):
                 # to equal those in the existing table. This will result in the returned records
                 # also being sliced.
             s = ("Resuming" if fromRecord else "Beginning")
-            LOGGER.info("%s incremental ingest of %s (%i records)", s, self.tableName, self.parser.recordsExpected)
+            LOGGER.info("%s incremental ingest of %s (%i bytes)", s, self.tableName, self.parser.fileSize)
             self.startTime = datetime.datetime.now()
 
             #Different ingest techniques are faster depending on the size of the input.
