@@ -176,7 +176,7 @@ class Ingester(object):
             LOGGER.error("Error encountered while ingesting '%s'", self.filePath)
             LOGGER.error("Last record ingested before failure: %d", self.lastRecordIngested)
             raise #re-raise the exception
-        endTime = datetime.datetime.now()
+        self.endTime = datetime.datetime.now()
         ts = str(self.endTime - self.startTime)
         LOGGER.info("Resumed full ingest of %s took %s", self.tableName, ts[:len(ts)-4])
 
