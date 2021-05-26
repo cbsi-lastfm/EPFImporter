@@ -34,7 +34,8 @@
 # OF THE APPLE SOFTWARE, HOWEVER CAUSED AND WHETHER UNDER THEORY OF CONTRACT, TORT
 # (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import bz2
+import io
 import os
 import re
 import logging
@@ -46,12 +47,6 @@ LOGGER = logging.getLogger()
 class SubstringNotFoundException(Exception):
     """
     Exception thrown when a comment character or other tag is not found in a situation where it's required.
-    """
-
-
-class WrongNumberOfDataFilesInTBZ(Exception):
-    """
-    Exception thrown when there is either none or more than one file in a tbz archive.
     """
 
 
@@ -94,13 +89,10 @@ class Parser(object):
         self.fieldDelim = fieldDelim
 
         # TODO: we need async-files here to make tarfile async
-        archive = tarfile.open(filePath, 'r:bz2')
-        members = archive.getmembers()
-        if len(members) != 1:
-            message = "Archive {} has {} files".format(filePath, len(members))
-            raise WrongNumberOfDataFilesInTBZ(message)
-
-        self.eFile = archive.extractfile(members[0]) # get the file from the archive for given tarinfo
+        self.bzFile = io.open(filePath, mode='rb', buffering=10240)
+        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
+        self.eFile = bz2.open(self.rawFile, 'rb')
+        self.eFile.seek(512)  # skip tarfile header
 
         self.fileSize = os.path.getsize(filePath)
 
@@ -135,7 +127,19 @@ class Parser(object):
                 self.dataTypes = ['DECIMAL(11,3)' if dt == 'DECIMAL(9,3)' else dt for dt in dts]
             elif aRow.startswith(exStart):
                 self.exportMode = self.splitRow(aRow, requiredPrefix=exStart)[0]
-        self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
+
+        # Close and reopen as we don't have seek for a streams - and don't need it.
+        # self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
+        self.eFile.close()
+        self.rawFile.close()
+        self.eFile = None
+        self.rawFile = None
+        self.bzFile = None
+
+        self.bzFile = io.open(filePath, mode='rb', buffering=10240)
+        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
+        self.eFile = bz2.open(self.rawFile, 'rb')
+        self.eFile.seek(1024)  # skip tarfile header
 
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
@@ -178,7 +182,8 @@ class Parser(object):
         Seeks to the beginning of the file if recordNum <=0,
         or the end if it's greater than the number of records.
         """
-        self.seekPos = 0
+        if self.seekPos != 0:
+            self.seekPos = 0
         self.latestRecordNum = 0
         if (recordNum <= 0):
             return
@@ -203,7 +208,7 @@ class Parser(object):
             ln = self.eFile.readline().decode("utf-8")
             if (not ln): #end of file
                 break
-            if (isFirstLine and ignoreComments and ln.find(self.commentChar) == 0): #comment
+            if (isFirstLine and ignoreComments and ln.find(self.commentChar) >= 0): #comment
                 continue
             lst.append(ln)
             if isFirstLine:
