@@ -39,7 +39,6 @@ import io
 import os
 import re
 import logging
-import tarfile
 
 LOGGER = logging.getLogger()
 
@@ -92,7 +91,7 @@ class Parser(object):
         self.bzFile = io.open(filePath, mode='rb', buffering=10240)
         self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
         self.eFile = bz2.open(self.rawFile, 'rb')
-        self.eFile.seek(512)  # skip tarfile header
+        self.eFile.read(512)  # skip tarfile header
 
         self.fileSize = os.path.getsize(filePath)
 
@@ -112,7 +111,7 @@ class Parser(object):
 
         #Grab the next 6 lines, which should include all the header comments
         firstRows=[]
-        for j in range(6):
+        for j in range(10):
             firstRows.append(self.nextRowString(ignoreComments=False))
             firstRows = [aRow for aRow in firstRows if aRow] #strip None rows (possible if the file is < 6 rows)
 
@@ -139,7 +138,7 @@ class Parser(object):
         self.bzFile = io.open(filePath, mode='rb', buffering=10240)
         self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
         self.eFile = bz2.open(self.rawFile, 'rb')
-        self.eFile.seek(1024)  # skip tarfile header
+        self.eFile.read(512)  # skip tarfile header
 
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
