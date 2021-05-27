@@ -180,9 +180,11 @@ class Parser(object):
 
         Seeks to the beginning of the file if recordNum <=0,
         or the end if it's greater than the number of records.
+
+        N.B. with tbz streams, "0" is actually at 512.
         """
-        if self.seekPos != 0:
-            self.seekPos = 0
+        if self.seekPos != 512:
+            self.seekPos = 512
         self.latestRecordNum = 0
         if (recordNum <= 0):
             return
@@ -204,10 +206,11 @@ class Parser(object):
         lst = []
         isFirstLine = True
         while (True):
-            ln = self.eFile.readline().decode("utf-8")
-            if (not ln): #end of file
+            ln = self.eFile.readline()
+            if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
                 break
-            if (isFirstLine and ignoreComments and ln.find(self.commentChar) >= 0): #comment
+            ln = ln.decode("utf-8")
+            if (isFirstLine and ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00"))): #comment
                 continue
             lst.append(ln)
             if isFirstLine:
