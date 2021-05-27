@@ -42,6 +42,7 @@ import logging
 
 LOGGER = logging.getLogger()
 
+TAR_HEADER_SIZE = 512  # exactly one filesystem block.
 
 class SubstringNotFoundException(Exception):
     """
@@ -91,7 +92,7 @@ class Parser(object):
         self.bzFile = io.open(filePath, mode='rb', buffering=10240)
         self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
         self.eFile = bz2.open(self.rawFile, 'rb')
-        self.eFile.read(512)  # skip tarfile header
+        self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         self.fileSize = os.path.getsize(filePath)
 
@@ -138,7 +139,7 @@ class Parser(object):
         self.bzFile = io.open(filePath, mode='rb', buffering=10240)
         self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
         self.eFile = bz2.open(self.rawFile, 'rb')
-        self.eFile.read(512)  # skip tarfile header
+        self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
@@ -183,8 +184,8 @@ class Parser(object):
 
         N.B. with tbz streams, "0" is actually at 512.
         """
-        if self.seekPos != 512:
-            self.seekPos = 512
+        if self.seekPos != TAR_HEADER_SIZE:
+            self.seekPos = TAR_HEADER_SIZE
         self.latestRecordNum = 0
         if (recordNum <= 0):
             return
