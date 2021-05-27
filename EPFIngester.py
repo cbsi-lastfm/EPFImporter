@@ -469,6 +469,7 @@ class Ingester(object):
             conn.commit()
 
         conn.close()
+        LOGGER.info("Ingested %i records", self.lastRecordIngested)
 
 
     def _checkProgress(self, recordGap=5000, timeGap=datetime.timedelta(0, 120, 0)):
