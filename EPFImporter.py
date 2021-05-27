@@ -40,6 +40,11 @@
 from __future__ import with_statement
 import EPFIngester
 import pymysql as MySQLdb
+try:
+    from psycopg2cffi import compat
+    compat.register()
+except ImportError:
+    pass
 import psycopg2
 import os
 import sys

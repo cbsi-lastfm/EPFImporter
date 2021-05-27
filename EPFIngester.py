@@ -37,6 +37,11 @@
 
 import EPFParser
 import pymysql as MySQLdb
+try:
+    from psycopg2cffi import compat
+    compat.register()
+except ImportError:
+    pass
 import psycopg2
 import os
 import datetime
