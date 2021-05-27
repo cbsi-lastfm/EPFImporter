@@ -34,6 +34,7 @@
 # OF THE APPLE SOFTWARE, HOWEVER CAUSED AND WHETHER UNDER THEORY OF CONTRACT, TORT
 # (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+import select
 
 import EPFParser
 import pymysql as MySQLdb
@@ -253,7 +254,7 @@ class Ingester(object):
         self.updateStatusDict()
 
 
-    def connect(self):
+    def connect(self, async_=0):
         """
         Establish a connection to the database, returning the connection object.
         """
@@ -263,9 +264,9 @@ class Ingester(object):
                 user=self.dbUser,
                 password=self.dbPassword,
                 database=self.dbName,
-                options=("-c search_path=%s" % self.tableSchema if self.tableSchema else None)
+                options=("-c search_path=%s" % self.tableSchema if self.tableSchema else None),
+                async_=async_
             )
-            conn.set_client_encoding('UTF8')
         else:
             conn = MySQLdb.connect(
                 charset='utf8',
@@ -415,10 +416,36 @@ class Ingester(object):
         exStrTemplate = """%s %s INTO %s %s VALUES %s"""
         colNamesStr = "(%s)" % (", ".join(self.parser.columnNames))
 
+        def wait(conn):
+            while True:
+                state = conn.poll()
+                if state == psycopg2.extensions.POLL_OK:
+                    break
+                elif state == psycopg2.extensions.POLL_WRITE:
+                    select.select([], [conn.fileno()], [])
+                elif state == psycopg2.extensions.POLL_READ:
+                    select.select([conn.fileno()], [], [])
+                else:
+                    raise psycopg2.OperationalError("poll() returned %s" % state)
+
+        # hack. Doesn't support Async but do it anyway!!
+        def set_client_encoding(conn, encoding):
+            from psycopg2cffi._impl import encodings as _enc
+            encoding = _enc.normalize(encoding)
+            if conn.encoding == encoding:
+                return
+
+            pyenc = _enc.encodings[encoding]
+            conn._encoding = encoding
+            conn._py_enc = pyenc
+
         self.parser.seekToRecord(resumeNum) #advance to resumeNum
-        conn = self.connect()
+        conn = self.connect(async_=1)
         if self.isPostgresql:
+            set_client_encoding(conn, 'UTF8')
             cur = conn.cursor()
+            # cur.execute('SET client_encoding = \'UTF8\'')
+            wait(conn)
             createRuleTemplate = """CREATE OR REPLACE RULE %s_on_duplicate_ignore AS ON INSERT TO %s WHERE EXISTS(SELECT 1 FROM %s WHERE (%s) = (%s)) DO INSTEAD NOTHING"""
             pkLst = self.parser.primaryKey
             if len(pkLst) > 0:
@@ -430,6 +457,7 @@ class Ingester(object):
 
             exStr = createRuleTemplate % (tableName, tableName, tableName, pk1, pk2)
             cur.execute(exStr)
+            wait(conn)
 
         while (True):
             #By default, we concatenate 200 inserts into a single INSERT statement.
@@ -443,10 +471,12 @@ class Ingester(object):
             stringList = ["(%s)" % (", ".join(aRecord)) for aRecord in escapedRecords]
 
             cur = conn.cursor()
+
             colVals = ", ".join(stringList)
             exStr = exStrTemplate % (commandString, ignoreString, tableName, colNamesStr, colVals)
 
             try:
+                wait(conn)
                 cur.execute(exStr)
             except (MySQLdb.Warning, psycopg2.Warning) as e:
                 LOGGER.warning(str(e))
@@ -462,11 +492,13 @@ class Ingester(object):
                 LOGGER.info("...at record %i...", recCheck)
 
         if self.isPostgresql:
+            wait(conn)
             dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
             exStr = dropRuleTemplate % (tableName, tableName)
             cur.execute(exStr)
 
         if self.isPostgresql:
+            wait(conn)
             conn.commit()
 
         conn.close()

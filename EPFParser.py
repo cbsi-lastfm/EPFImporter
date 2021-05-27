@@ -136,8 +136,8 @@ class Parser(object):
         self.rawFile = None
         self.bzFile = None
 
-        self.bzFile = io.open(filePath, mode='rb', buffering=102400*2) # 100k is bzip's minimum block size, but load more anyway
-        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400*4)
+        self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size, but load more anyway
+        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
         self.eFile = bz2.open(self.rawFile, 'rb')
         self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
