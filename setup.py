@@ -11,6 +11,6 @@ setup(
     install_requires=[
         'configparser==5.0.2',
         'PyMySQL==1.0.2',
-        'psycopg2==2.8.6',
+        'psycopg2cffi==2.9.0',
     ],
 )

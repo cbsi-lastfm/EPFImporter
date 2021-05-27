@@ -34,24 +34,19 @@
 # OF THE APPLE SOFTWARE, HOWEVER CAUSED AND WHETHER UNDER THEORY OF CONTRACT, TORT
 # (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import bz2
+import io
 import os
 import re
 import logging
-import tarfile
 
 LOGGER = logging.getLogger()
 
+TAR_HEADER_SIZE = 512  # exactly one filesystem block.
 
 class SubstringNotFoundException(Exception):
     """
     Exception thrown when a comment character or other tag is not found in a situation where it's required.
-    """
-
-
-class WrongNumberOfDataFilesInTBZ(Exception):
-    """
-    Exception thrown when there is either none or more than one file in a tbz archive.
     """
 
 
@@ -94,20 +89,17 @@ class Parser(object):
         self.fieldDelim = fieldDelim
 
         # TODO: we need async-files here to make tarfile async
-        archive = tarfile.open(filePath, 'r:bz2')
-        members = archive.getmembers()
-        if len(members) != 1:
-            message = "Archive {} has {} files".format(filePath, len(members))
-            raise WrongNumberOfDataFilesInTBZ(message)
-
-        self.eFile = archive.extractfile(members[0]) # get the file from the archive for given tarinfo
+        self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
+        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
+        self.eFile = bz2.open(self.rawFile, 'rb')
+        self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         self.fileSize = os.path.getsize(filePath)
 
         # An exact record count exists in the last row of the file, but that would involve extracting the entire tarfile
         # first - something we want to avoid. So, instead, we just guess based on the input file size. This is ONLY used
         # to determine the ingestion strategy, not for anything else.
-        self.recordsExpected = 499_999 if self.fileSize < 10_000_000 else 500_001
+        self.recordsExpected = 499999 if self.fileSize < 10000000 else 500001
 
         #Extract the column names
         line1 = self.nextRowString(ignoreComments=False)
@@ -120,7 +112,7 @@ class Parser(object):
 
         #Grab the next 6 lines, which should include all the header comments
         firstRows=[]
-        for j in range(6):
+        for j in range(10):
             firstRows.append(self.nextRowString(ignoreComments=False))
             firstRows = [aRow for aRow in firstRows if aRow] #strip None rows (possible if the file is < 6 rows)
 
@@ -135,7 +127,19 @@ class Parser(object):
                 self.dataTypes = ['DECIMAL(11,3)' if dt == 'DECIMAL(9,3)' else dt for dt in dts]
             elif aRow.startswith(exStart):
                 self.exportMode = self.splitRow(aRow, requiredPrefix=exStart)[0]
-        self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
+
+        # Close and reopen as we don't have seek for a streams - and don't need it.
+        # self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
+        self.eFile.close()
+        self.rawFile.close()
+        self.eFile = None
+        self.rawFile = None
+        self.bzFile = None
+
+        self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
+        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
+        self.eFile = bz2.open(self.rawFile, 'rb')
+        self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
@@ -177,8 +181,11 @@ class Parser(object):
 
         Seeks to the beginning of the file if recordNum <=0,
         or the end if it's greater than the number of records.
+
+        N.B. with tbz streams, "0" is actually at 512.
         """
-        self.seekPos = 0
+        if self.seekPos != TAR_HEADER_SIZE:
+            self.seekPos = TAR_HEADER_SIZE
         self.latestRecordNum = 0
         if (recordNum <= 0):
             return
@@ -200,10 +207,11 @@ class Parser(object):
         lst = []
         isFirstLine = True
         while (True):
-            ln = self.eFile.readline().decode("utf-8")
-            if (not ln): #end of file
+            ln = self.eFile.readline()
+            if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
                 break
-            if (isFirstLine and ignoreComments and ln.find(self.commentChar) == 0): #comment
+            ln = ln.decode("utf-8")
+            if (isFirstLine and ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00"))): #comment
                 continue
             lst.append(ln)
             if isFirstLine:

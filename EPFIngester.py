@@ -37,6 +37,11 @@
 
 import EPFParser
 import pymysql as MySQLdb
+try:
+    from psycopg2cffi import compat
+    compat.register()
+except ImportError:
+    pass
 import psycopg2
 import os
 import datetime
@@ -464,6 +469,7 @@ class Ingester(object):
             conn.commit()
 
         conn.close()
+        LOGGER.info("Ingested %i records", self.lastRecordIngested)
 
 
     def _checkProgress(self, recordGap=5000, timeGap=datetime.timedelta(0, 120, 0)):
