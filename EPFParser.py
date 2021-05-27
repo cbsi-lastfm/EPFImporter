@@ -89,8 +89,8 @@ class Parser(object):
         self.fieldDelim = fieldDelim
 
         # TODO: we need async-files here to make tarfile async
-        self.bzFile = io.open(filePath, mode='rb', buffering=10240)
-        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=10240)
+        self.bzFile = io.open(filePath, mode='rb', buffering=102400)
+        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
         self.eFile = bz2.open(self.rawFile, 'rb')
         self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
