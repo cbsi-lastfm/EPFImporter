@@ -265,6 +265,7 @@ class Ingester(object):
                 database=self.dbName,
                 options=("-c search_path=%s" % self.tableSchema if self.tableSchema else None)
             )
+            conn.set_client_encoding('UTF8')
         else:
             conn = MySQLdb.connect(
                 charset='utf8',
