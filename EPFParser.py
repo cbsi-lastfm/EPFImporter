@@ -99,7 +99,7 @@ class Parser(object):
         # An exact record count exists in the last row of the file, but that would involve extracting the entire tarfile
         # first - something we want to avoid. So, instead, we just guess based on the input file size. This is ONLY used
         # to determine the ingestion strategy, not for anything else.
-        self.recordsExpected = 499999 if self.fileSize < 10000000 else 500001
+        self.recordsExpected = 499999 if self.fileSize < 100000000 else 500001
 
         #Extract the column names
         line1 = self.nextRowString(ignoreComments=False)
