@@ -416,6 +416,9 @@ class Ingester(object):
         exStrTemplate = """%s %s INTO %s %s VALUES %s"""
         colNamesStr = "(%s)" % (", ".join(self.parser.columnNames))
 
+        # Psycopg2 async helpers. (They don't need to be >here< here, but they're not used anywhere else)
+
+        # Psycopg2 async wait function, as in the docs.
         def wait(conn):
             while True:
                 state = conn.poll()
@@ -428,8 +431,12 @@ class Ingester(object):
                 else:
                     raise psycopg2.OperationalError("poll() returned %s" % state)
 
-        # hack. Doesn't support Async but do it anyway!!
-        def set_client_encoding(conn, encoding):
+        # Hack. psycopg2 async mode doesn't support conn.set_client_encoding(), because that actually executes a
+        # "SET client_encoding" statement on the server (and psycopg2 doesn't handle that call using the async API).
+        # However, we still need the python client to know the encoding (for mogrify etc) and you get errors about
+        # _py_enc being None if it's not set at all. This hack doesn't actually set it at the libpq level; so the
+        # locale (LC_*) should be set to en_US.UTF-8 too. Modified from psycopg2 cursor.py
+        def psycopg2_async_set_client_encoding(conn, encoding):
             from psycopg2cffi._impl import encodings as _enc
             encoding = _enc.normalize(encoding)
             if conn.encoding == encoding:
@@ -442,10 +449,8 @@ class Ingester(object):
         self.parser.seekToRecord(resumeNum) #advance to resumeNum
         conn = self.connect(async_=1)
         if self.isPostgresql:
-            set_client_encoding(conn, 'UTF8')
+            psycopg2_async_set_client_encoding(conn, 'UTF8')
             cur = conn.cursor()
-            # cur.execute('SET client_encoding = \'UTF8\'')
-            wait(conn)
             createRuleTemplate = """CREATE OR REPLACE RULE %s_on_duplicate_ignore AS ON INSERT TO %s WHERE EXISTS(SELECT 1 FROM %s WHERE (%s) = (%s)) DO INSTEAD NOTHING"""
             pkLst = self.parser.primaryKey
             if len(pkLst) > 0:
@@ -456,6 +461,7 @@ class Ingester(object):
                 pk2 = "1"
 
             exStr = createRuleTemplate % (tableName, tableName, tableName, pk1, pk2)
+            wait(conn)
             cur.execute(exStr)
             wait(conn)
 
@@ -476,7 +482,8 @@ class Ingester(object):
             exStr = exStrTemplate % (commandString, ignoreString, tableName, colNamesStr, colVals)
 
             try:
-                wait(conn)
+                if self.isPostgresql:
+                    wait(conn)
                 cur.execute(exStr)
             except (MySQLdb.Warning, psycopg2.Warning) as e:
                 LOGGER.warning(str(e))
@@ -496,10 +503,7 @@ class Ingester(object):
             dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
             exStr = dropRuleTemplate % (tableName, tableName)
             cur.execute(exStr)
-
-        if self.isPostgresql:
             wait(conn)
-            conn.commit()
 
         conn.close()
         LOGGER.info("Ingested %i records", self.lastRecordIngested)
