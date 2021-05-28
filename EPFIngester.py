@@ -476,7 +476,8 @@ class Ingester(object):
             escapedRecords = self._escapeRecords(records) #This will sanitize the records
             stringList = ["(%s)" % (", ".join(aRecord)) for aRecord in escapedRecords]
 
-            cur = conn.cursor()
+            if self.isMysql:
+                cur = conn.cursor()
 
             colVals = ", ".join(stringList)
             exStr = exStrTemplate % (commandString, ignoreString, tableName, colNamesStr, colVals)
