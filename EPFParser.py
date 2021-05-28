@@ -136,7 +136,7 @@ class Parser(object):
         self.rawFile = None
         self.bzFile = None
 
-        self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
+        self.bzFile = io.open(filePath, mode='rb', buffering=102400*10) # 100k is bzip's minimum block size, but load more anyway
         self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
         self.eFile = bz2.open(self.rawFile, 'rb')
         self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
@@ -155,6 +155,10 @@ class Parser(object):
                 self.numberColumns.append(j)
         #Build a dictionary of column names to data types
         self.typeMap = dict(zip(self.columnNames, self.dataTypes))
+
+        # used in nextRecord
+        self.yearMatch = re.compile(r"^\d\d\d\d$")
+        self.nonNumberMatch = re.compile(r'[^0-9.-]')
 
 
     def setSeekPos(self, pos=0):
@@ -277,12 +281,22 @@ class Parser(object):
             #massage dates into MySQL-compatible format.
             #most date values look like '2009 06 21'; some are '2005-09-06-00:00:00-Etc/GMT'
             #there are also some cases where there's only a year; we'll pad it out with a bogus month/day
-            yearMatch = re.compile(r"^\d\d\d\d$")
+
+
             for j in self.dateColumns:
                 if rec[j]:
                     rec[j] = rec[j].strip().replace(" ", "-")[:19] #Include at most the first 19 chars
-                    if yearMatch.match(rec[j]):
+                    # this is memoised by the constructor for efficiency
+                    # r"^\d\d\d\d$"
+                    if self.yearMatch.match(rec[j]):
                         rec[j] = "%s-01-01" % rec[j]
+
+            for j in self.numberColumns:
+                if rec[j] and not rec[j][0].isdigit():
+                    # we've seen at least one integer field in a file with square brackets around it. Remove.
+                    # r'[^0-9.-]'
+                    rec[j] = self.nonNumberMatch.sub('', rec[j])
+
             return rec
         else:
             return None
