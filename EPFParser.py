@@ -285,7 +285,7 @@ class Parser(object):
 
             for j in self.dateColumns:
                 if rec[j]:
-                    rec[j] = rec[j].strip().replace(" ", "-")[:19] #Include at most the first 19 chars
+                    rec[j] = rec[j].strip().replace(" ", "-", count=2)[:19] #Include at most the first 19 chars
                     # this is memoised by the constructor for efficiency
                     # r"^\d\d\d\d$"
                     if self.yearMatch.match(rec[j]):
