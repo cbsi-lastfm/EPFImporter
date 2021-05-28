@@ -474,12 +474,12 @@ class Ingester(object):
                 break
 
             escapedRecords = self._escapeRecords(records) #This will sanitize the records
-            stringList = ["(%s)" % (", ".join(aRecord)) for aRecord in escapedRecords]
+            stringList = [(", ".join(aRecord)) for aRecord in escapedRecords]
 
             if self.isMysql:
                 cur = conn.cursor()
 
-            colVals = ", ".join(stringList)
+            colVals = f"({'), ('.join(stringList)})"
             exStr = exStrTemplate % (commandString, ignoreString, tableName, colNamesStr, colVals)
 
             try:
