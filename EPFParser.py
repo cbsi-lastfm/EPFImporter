@@ -35,6 +35,7 @@
 # (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import bz2
+import datetime
 import io
 import os
 import re
@@ -157,7 +158,6 @@ class Parser(object):
         self.typeMap = dict(zip(self.columnNames, self.dataTypes))
 
         # used in nextRecord
-        self.yearMatch = re.compile(r"^\d\d\d\d$")
         self.nonNumberMatch = re.compile(r'[^0-9.-]')
 
 
@@ -282,14 +282,27 @@ class Parser(object):
             #most date values look like '2009 06 21'; some are '2005-09-06-00:00:00-Etc/GMT'
             #there are also some cases where there's only a year; we'll pad it out with a bogus month/day
 
-
             for j in self.dateColumns:
                 if rec[j]:
-                    rec[j] = rec[j].strip().replace(" ", "-", count=2)[:19] #Include at most the first 19 chars
-                    # this is memoised by the constructor for efficiency
-                    # r"^\d\d\d\d$"
-                    if self.yearMatch.match(rec[j]):
-                        rec[j] = "%s-01-01" % rec[j]
+                    rec[j] = rec[j].strip()
+                    if len(rec[j]) > 3:
+                        if rec[j][2] in ' -':
+                            # found a 2-digit year
+                            rec[j] = f'20{rec[j]}'
+                            if int(rec[j][:4]) > datetime.date.today().year:
+                                rec[j] = f'19{rec[j][2:]}'
+
+                        elif rec[j][1] in ' -':
+                            # found a 1-digit year
+                            rec[j] = f'200{rec[j]}'
+                            if int(rec[j][:4]) > datetime.date.today().year:
+                                rec[j] = f'199{rec[j][3:]}'
+
+                    rec[j] = rec[j][:19].replace("-", " ") # cut the timezone info
+
+                    if len(rec[j]) == 4:
+                        rec[j] = f"{rec[j]}-01-01"
+
 
             for j in self.numberColumns:
                 if rec[j] and not rec[j][0].isdigit():
