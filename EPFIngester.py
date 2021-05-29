@@ -553,9 +553,10 @@ class Ingester(object):
             wait(conns[7])
             conns[7].close()
 
-            conn = self.connect()
             dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
             exStr = dropRuleTemplate % (tableName, tableName)
+            conn = self.connect()
+            cur = conn.cursor()
             cur.execute(exStr)
             conn.commit()
 
