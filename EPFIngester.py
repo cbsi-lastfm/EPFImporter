@@ -413,8 +413,8 @@ class Ingester(object):
         #REPLACE is a MySQL extension which inserts if the key is new, or deletes and inserts if the key is a duplicate
         commandString = ("REPLACE" if (isIncremental and self.isMysql) else "INSERT")
         ignoreString = ("IGNORE" if (skipKeyViolators and not isIncremental and self.isMysql) else "")
-        exStrTemplate = """%s %s INTO %s %s VALUES %s"""
         colNamesStr = "(%s)" % (", ".join(self.parser.columnNames))
+        exStrTemplate = f"""{commandString} {ignoreString} INTO {tableName} {colNamesStr} VALUES %s"""
 
         # Psycopg2 async helpers. (They don't need to be >here< here, but they're not used anywhere else)
 
@@ -447,8 +447,8 @@ class Ingester(object):
             conn._py_enc = pyenc
 
         self.parser.seekToRecord(resumeNum) #advance to resumeNum
-        conn = self.connect(async_=1)
         if self.isPostgresql:
+            conn = self.connect()
             psycopg2_async_set_client_encoding(conn, 'UTF8')
             cur = conn.cursor()
             createRuleTemplate = """CREATE OR REPLACE RULE %s_on_duplicate_ignore AS ON INSERT TO %s WHERE EXISTS(SELECT 1 FROM %s WHERE (%s) = (%s)) DO INSTEAD NOTHING"""
@@ -461,9 +461,34 @@ class Ingester(object):
                 pk2 = "1"
 
             exStr = createRuleTemplate % (tableName, tableName, tableName, pk1, pk2)
-            wait(conn)
             cur.execute(exStr)
-            wait(conn)
+            conn.commit()
+            conn.close()
+
+            # open 4 concurrent connections
+            conn_idx = 0
+            conns = [
+                self.connect(async_=1),
+                self.connect(async_=1),
+                self.connect(async_=1),
+                self.connect(async_=1),
+                self.connect(async_=1),
+                self.connect(async_=1),
+                self.connect(async_=1),
+                self.connect(async_=1),
+            ]
+            curs = [
+                conns[0].cursor(),
+                conns[1].cursor(),
+                conns[2].cursor(),
+                conns[3].cursor(),
+                conns[4].cursor(),
+                conns[5].cursor(),
+                conns[6].cursor(),
+                conns[7].cursor(),
+            ]
+        else:
+            conn = self.connect()
 
         while (True):
             #By default, we concatenate 200 inserts into a single INSERT statement.
@@ -480,12 +505,14 @@ class Ingester(object):
                 cur = conn.cursor()
 
             colVals = f"({'), ('.join(stringList)})"
-            exStr = exStrTemplate % (commandString, ignoreString, tableName, colNamesStr, colVals)
+            exStr = exStrTemplate % (colVals,)
 
             try:
                 if self.isPostgresql:
-                    wait(conn)
-                cur.execute(exStr)
+                    wait(conns[conn_idx])
+                    curs[conn_idx].execute(exStr)
+                else:
+                    cur.execute(exStr)
             except (MySQLdb.Warning, psycopg2.Warning) as e:
                 LOGGER.warning(str(e))
             except (MySQLdb.IntegrityError, psycopg2.IntegrityError) as e:
@@ -494,17 +521,44 @@ class Ingester(object):
             except (MySQLdb.Error, psycopg2.Error):
                 LOGGER.error("error executing %s" % exStr)
                 raise #re-raise the exception
+
+            if self.isPostgresql:
+                conn_idx += 1
+                conn_idx = conn_idx % 8
+
             self.lastRecordIngested = self.parser.latestRecordNum
             recCheck = self._checkProgress()
             if recCheck:
-                LOGGER.info("...at record %i...", recCheck)
+                LOGGER.info(
+                    "...at record %i (%f%%)...",
+                    recCheck,
+                    (self.parser.bzFile.tell() / self.parser.fileSize) * 100
+                )
 
         if self.isPostgresql:
-            wait(conn)
+            wait(conns[0])
+            conns[0].close()
+            wait(conns[1])
+            conns[1].close()
+            wait(conns[2])
+            conns[2].close()
+            wait(conns[3])
+            conns[3].close()
+            wait(conns[4])
+            conns[4].close()
+            wait(conns[5])
+            conns[5].close()
+            wait(conns[6])
+            conns[6].close()
+            wait(conns[7])
+            conns[7].close()
+
             dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
             exStr = dropRuleTemplate % (tableName, tableName)
+            conn = self.connect()
+            cur = conn.cursor()
             cur.execute(exStr)
-            wait(conn)
+            conn.commit()
 
         conn.close()
         LOGGER.info("Ingested %i records", self.lastRecordIngested)
@@ -595,6 +649,7 @@ class Ingester(object):
         cur.execute("""DROP TABLE IF EXISTS %s""" % self.unionTableName)
 
         if self.isPostgresql:
+            cur.execute("SET work_mem TO '16GB'")  # some union tables need a LOT of RAM
             exStr = """CREATE TABLE %s AS %s""" % (self.unionTableName, self._incrementalUnionString())
         else:
             exStr = """CREATE TABLE %s %s""" % (self.unionTableName, self._incrementalUnionString())
