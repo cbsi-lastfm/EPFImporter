@@ -649,6 +649,7 @@ class Ingester(object):
         cur.execute("""DROP TABLE IF EXISTS %s""" % self.unionTableName)
 
         if self.isPostgresql:
+            cur.execute("SET work_mem TO '16GB'")  # some union tables need a LOT of RAM
             exStr = """CREATE TABLE %s AS %s""" % (self.unionTableName, self._incrementalUnionString())
         else:
             exStr = """CREATE TABLE %s %s""" % (self.unionTableName, self._incrementalUnionString())
