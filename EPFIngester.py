@@ -225,7 +225,7 @@ class Ingester(object):
             try:
                 # XXX: we always update in place. because collection_price REFUSES to be union merged in Postgres
                 #      ... takes 3 hours to create the union table before failing. Update in place is always faster.
-                if True or self.parser.recordsExpected < 500000: #update table in place
+                if self.isPostgresql or self.parser.recordsExpected < 500000: #update table in place
                     self._populateTable(self.tableName,
                                     resumeNum=fromRecord,
                                     isIncremental=True,
