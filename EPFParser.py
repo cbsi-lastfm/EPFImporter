@@ -74,7 +74,7 @@ class Parser(object):
     exportModeTag = "exportMode:"
     recordCountTag = "recordsWritten:"
 
-    lineQueue = collections.deque(maxlen=8192)
+    lineQueue = collections.deque(maxlen=4096)
 
     def __init__(self, filePath, typeMap={"CLOB":"LONGTEXT"}, recordDelim='\x02\n', fieldDelim='\x01'):
         self.dataTypeMap = typeMap
@@ -118,7 +118,7 @@ class Parser(object):
                         q.append(ln)
                         break
                     except:
-                        pass
+                        time.sleep(0)  # pass but favour other threads
 
                 if not ln or len(ln) == 0 or ln[0] == "\x00":  # end of file - skipping zero-fill at the end of tarfile
                     break
@@ -228,7 +228,7 @@ class Parser(object):
                     ln = self.lineQueue.popleft()
                     break
                 except:
-                    pass
+                    time.sleep(0)  # pass but favour other threads
 
             if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
                 break
