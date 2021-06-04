@@ -118,7 +118,7 @@ class Parser(object):
                         q.append(ln)
                         break
                     except:
-                        time.sleep(0)  # pass but favour other threads
+                        pass
 
                 if not ln or len(ln) == 0 or ln[0] == "\x00":  # end of file - skipping zero-fill at the end of tarfile
                     break
