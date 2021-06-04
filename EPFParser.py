@@ -297,6 +297,11 @@ class Parser(object):
                     # we've seen at least one integer field in a file with square brackets around it. Remove.
                     # r'[^0-9.-]'
                     rec[j] = self.nonNumberMatch.sub('', rec[j])
+                    if rec[j] == '':
+                        # Have seen at least one instance of the text "<UnknownKeyException>" in a column.
+                        # lost cause - just skip the record entirely.
+                        LOGGER.warning("Skipping record %i because it is malformed", self.latestRecordNum)
+                        return self.nextRecord()
 
             return rec
         else:
