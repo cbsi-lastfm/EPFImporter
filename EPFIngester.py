@@ -416,7 +416,7 @@ class Ingester(object):
         commandString = ("REPLACE" if (isIncremental and self.isMysql) else "INSERT")
         ignoreString = ("IGNORE" if (skipKeyViolators and not isIncremental and self.isMysql) else "")
         colNamesStr = "(%s)" % (", ".join(self.parser.columnNames))
-        exStrTemplate = f"""{commandString} {ignoreString} INTO {tableName} {colNamesStr} VALUES %s"""
+        exStrTemplate = f"""{commandString} {ignoreString} INTO {tableName} {colNamesStr} VALUES"""
 
         # Psycopg2 async helpers. (They don't need to be >here< here, but they're not used anywhere else)
 
@@ -506,8 +506,7 @@ class Ingester(object):
             if self.isMysql:
                 cur = conn.cursor()
 
-            colVals = f"({'), ('.join(stringList)})"
-            exStr = exStrTemplate % (colVals,)
+            exStr = f"{exStrTemplate} ({'), ('.join(stringList)})"
 
             try:
                 if self.isPostgresql:
@@ -533,9 +532,8 @@ class Ingester(object):
             recCheck = self._checkProgress()
             if recCheck:
                 LOGGER.info(
-                    "...at record %i (%f%%)...",
-                    recCheck,
-                    (self.parser.bzFile.tell() / self.parser.fileSize) * 100
+                    "...at record %i...",
+                    recCheck
                 )
 
         if self.isPostgresql:

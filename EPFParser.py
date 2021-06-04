@@ -41,6 +41,7 @@ import io
 import os
 import re
 import logging
+import subprocess
 import threading
 import time
 
@@ -74,8 +75,6 @@ class Parser(object):
     exportModeTag = "exportMode:"
     recordCountTag = "recordsWritten:"
 
-    lineQueue = collections.deque(maxlen=4096)
-
     def __init__(self, filePath, typeMap={"CLOB":"LONGTEXT"}, recordDelim='\x02\n', fieldDelim='\x01'):
         self.dataTypeMap = typeMap
         self.numberTypes = ["INTEGER", "INT", "BIGINT", "TINYINT"]
@@ -94,9 +93,12 @@ class Parser(object):
         self.recordDelim = recordDelim
         self.fieldDelim = fieldDelim
 
-        self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
-        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
-        self.eFile = bz2.open(self.rawFile, 'rb')
+        # self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
+        # self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
+        # self.eFile = bz2.open(self.rawFile, 'rb')
+
+        self.process = subprocess.Popen(['bunzip2', '-c', filePath], stdout=subprocess.PIPE, bufsize=16384)
+        self.eFile = self.process.stdout
         self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         self.fileSize = os.path.getsize(filePath)
@@ -105,27 +107,6 @@ class Parser(object):
         # first - something we want to avoid. So, instead, we just guess based on the input file size. This is ONLY used
         # to determine the ingestion strategy, not for anything else.
         self.recordsExpected = 499999 if self.fileSize < 100000000 else 500001
-
-        # fill the line queue in a separate thread.
-        eFile = self.eFile
-        q = self.lineQueue
-
-        def qfiller():
-            while True:
-                ln = eFile.readline()
-                while True:
-                    try:
-                        q.append(ln)
-                        break
-                    except:
-                        pass
-
-                if not ln or len(ln) == 0 or ln[0] == "\x00":  # end of file - skipping zero-fill at the end of tarfile
-                    break
-            q.join()
-
-        # turn-on the worker thread
-        threading.Thread(target=qfiller, daemon=True).start()
 
         #Extract the column names
         line1 = self.nextRowString(ignoreComments=False)
@@ -223,16 +204,10 @@ class Parser(object):
         lst = []
         isFirstLine = True
         while True:
-            while True:
-                try:
-                    ln = self.lineQueue.popleft()
-                    break
-                except:
-                    pass
-
+            ln = self.eFile.readline()
             if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
                 break
-            ln = ln.decode("utf-8")
+            ln = str(ln, "utf-8")
             if (isFirstLine and ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00"))): #comment
                 continue
             lst.append(ln)
@@ -253,7 +228,7 @@ class Parser(object):
         This allows much faster access to a record in the middle of the file.
         """
         while (True):
-            ln = self.eFile.readline().decode("utf-8")
+            ln = str(self.eFile.readline(), "utf-8")
             if (not ln): #end of file
                 return
             if (ln.find(self.commentChar) == 0): #comment; always skip
