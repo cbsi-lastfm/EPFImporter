@@ -129,19 +129,6 @@ class Parser(object):
             elif aRow.startswith(exStart):
                 self.exportMode = self.splitRow(aRow, requiredPrefix=exStart)[0]
 
-        # Close and reopen as we don't have seek for a streams - and don't need it.
-        # self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
-        self.eFile.close()
-        self.rawFile.close()
-        self.eFile = None
-        self.rawFile = None
-        self.bzFile = None
-
-        self.bzFile = io.open(filePath, mode='rb', buffering=102400*10) # 100k is bzip's minimum block size, but load more anyway
-        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
-        self.eFile = bz2.open(self.rawFile, 'rb')
-        self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
-
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
 
@@ -188,11 +175,11 @@ class Parser(object):
 
         N.B. with tbz streams, "0" is actually at 512.
         """
+        if (recordNum <= 0):
+            return
         if self.seekPos != TAR_HEADER_SIZE:
             self.seekPos = TAR_HEADER_SIZE
         self.latestRecordNum = 0
-        if (recordNum <= 0):
-            return
         for j in range(recordNum):
             self.advanceToNextRecord()
 
