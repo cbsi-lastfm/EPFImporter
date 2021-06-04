@@ -111,33 +111,17 @@ class Parser(object):
         q = self.lineQueue
 
         def qfiller():
-            while True: # loop to read all lines. Terminates when a line is empty or starts with nulls.
+            while True:
+                ln = eFile.readline()
+                while True:
+                    try:
+                        q.append(ln)
+                        break
+                    except:
+                        pass
 
-               lst = []
-               while True: # loop to read parts of a single line. Terminates at the record delimiter.
-                   ln = self.eFile.readline()
-                   if (not ln or len(ln) == 0 or ln[0] == "\x00"):
-                       break # end of file - skipping zero-fill at the end of tarfile
-                   ln = ln.decode("utf-8")
-                   lst.append(ln)
-                   if (ln.find(self.recordDelim) != -1): #last textual line of this record
-                       break # end of record
-
-               if (len(lst) == 0):
-                   rowString = None
-               else:
-                   rowString = "".join(lst) # concatenate the lines into the full content of the row
-
-               while True: # loop to put the string on a queue. Terminates when the string has been put on the queue.
-                   try:
-                       q.append(rowString)
-                       break # string is enqueued.
-                   except:
-                       time.sleep(0)  # keep trying, but favour a reschedule to the consumer
-
-                if not rowString:
-                    break # end of input.
-
+                if not ln or len(ln) == 0 or ln[0] == "\x00":  # end of file - skipping zero-fill at the end of tarfile
+                    break
             q.join()
 
         # turn-on the worker thread
@@ -236,15 +220,31 @@ class Parser(object):
         (http://bugs.python.org/issue1152248), so we use normal line reading and then concatenate
         when we hit 0x02.
         """
+        lst = []
+        isFirstLine = True
         while True:
-            try:
-                rowString = self.lineQueue.popleft()
-                if ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00")):
-                    continue
-            except:
-                time.sleep(0)  # keep trying, but favour a reschedule to the producer
+            while True:
+                try:
+                    ln = self.lineQueue.popleft()
+                    break
+                except:
+                    pass
 
-        return rowString
+            if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
+                break
+            ln = ln.decode("utf-8")
+            if (isFirstLine and ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00"))): #comment
+                continue
+            lst.append(ln)
+            if isFirstLine:
+                isFirstLine = False
+            if (ln.find(self.recordDelim) != -1): #last textual line of this record
+                break
+        if (len(lst) == 0):
+            return None
+        else:
+            rowString = "".join(lst) #concatenate the lines into a single string, which is the full content of the row
+            return rowString
 
 
     def advanceToNextRecord(self):
