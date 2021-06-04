@@ -511,22 +511,23 @@ class Ingester(object):
 
             try:
                 if self.isPostgresql:
-                    wait(conns[conn_idx])
+                    while True:
+                        state = conns[conn_idx].poll()
+                        if state == psycopg2.extensions.POLL_OK:
+                            break
+                        conn_idx += 1
+                        conn_idx = conn_idx % 8
                     curs[conn_idx].execute(exStr)
                 else:
                     cur.execute(exStr)
             except (MySQLdb.Warning, psycopg2.Warning) as e:
                 LOGGER.warning(str(e))
             except (MySQLdb.IntegrityError, psycopg2.IntegrityError) as e:
-            #This is likely a primary key constraint violation; should only be hit if skipKeyViolators is False
+                # This is likely a primary key constraint violation; should only be hit if skipKeyViolators is False
                 LOGGER.error(str(e))
             except (MySQLdb.Error, psycopg2.Error):
                 LOGGER.error("error executing %s" % exStr)
-                raise #re-raise the exception
-
-            if self.isPostgresql:
-                conn_idx += 1
-                conn_idx = conn_idx % 8
+                raise  # re-raise the exception
 
             self.lastRecordIngested = self.parser.latestRecordNum
             recCheck = self._checkProgress()
