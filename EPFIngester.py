@@ -223,7 +223,9 @@ class Ingester(object):
             #If there are a large number of records, it's much faster to do a prune-and-merge technique;
             #for fewer records, it's faster to update the existing table.
             try:
-                if self.parser.recordsExpected < 500000: #update table in place
+                # XXX: we always update in place. because collection_price REFUSES to be union merged in Postgres
+                #      ... takes 3 hours to create the union table before failing. Update in place is always faster.
+                if True or self.parser.recordsExpected < 500000: #update table in place
                     self._populateTable(self.tableName,
                                     resumeNum=fromRecord,
                                     isIncremental=True,
@@ -649,7 +651,6 @@ class Ingester(object):
         cur.execute("""DROP TABLE IF EXISTS %s""" % self.unionTableName)
 
         if self.isPostgresql:
-            cur.execute("SET work_mem TO '16GB'")  # some union tables need a LOT of RAM
             exStr = """CREATE TABLE %s AS %s""" % (self.unionTableName, self._incrementalUnionString())
         else:
             exStr = """CREATE TABLE %s %s""" % (self.unionTableName, self._incrementalUnionString())
