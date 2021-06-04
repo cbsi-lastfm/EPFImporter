@@ -34,16 +34,11 @@
 # OF THE APPLE SOFTWARE, HOWEVER CAUSED AND WHETHER UNDER THEORY OF CONTRACT, TORT
 # (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import bz2
-import collections
 import datetime
-import io
 import os
 import re
 import logging
 import subprocess
-import threading
-import time
 
 LOGGER = logging.getLogger()
 
