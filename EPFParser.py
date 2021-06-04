@@ -38,6 +38,7 @@ import bz2
 import datetime
 import io
 import os
+import queue
 import re
 import logging
 
@@ -71,6 +72,8 @@ class Parser(object):
     exportModeTag = "exportMode:"
     recordCountTag = "recordsWritten:"
 
+    lineQueue = queue.Queue(maxsize=20000)
+
     def __init__(self, filePath, typeMap={"CLOB":"LONGTEXT"}, recordDelim='\x02\n', fieldDelim='\x01'):
         self.dataTypeMap = typeMap
         self.numberTypes = ["INTEGER", "INT", "BIGINT", "TINYINT"]
@@ -89,7 +92,6 @@ class Parser(object):
         self.recordDelim = recordDelim
         self.fieldDelim = fieldDelim
 
-        # TODO: we need async-files here to make tarfile async
         self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
         self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
         self.eFile = bz2.open(self.rawFile, 'rb')
