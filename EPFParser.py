@@ -200,21 +200,20 @@ class Parser(object):
         isFirstLine = True
         while True:
             ln = self.eFile.readline()
-            if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
+            if not ln or ln == b'' or ln[0] == 0: #end of file - skipping zero-fill at the end of tarfile
                 break
-            ln = str(ln, "utf-8")
-            if (isFirstLine and ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00"))): #comment
+            if chr(ln[0]) == self.commentChar and isFirstLine and ignoreComments: #comment
                 continue
             lst.append(ln)
             if isFirstLine:
                 isFirstLine = False
-            if (ln.find(self.recordDelim) != -1): #last textual line of this record
+            if ln.endswith(bytes(self.recordDelim, 'utf-8')): #last textual line of this record
                 break
         if (len(lst) == 0):
             return None
         else:
-            rowString = "".join(lst) #concatenate the lines into a single string, which is the full content of the row
-            return rowString
+            rowString = b''.join(lst) #concatenate the lines into a single string, which is the full content of the row
+            return str(rowString, 'utf-8')
 
 
     def advanceToNextRecord(self):
