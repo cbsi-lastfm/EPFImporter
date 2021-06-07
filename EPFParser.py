@@ -240,8 +240,7 @@ class Parser(object):
         If requiredPrefix is not present in the row, throws a SubstringNotFound exception
         """
         if (requiredPrefix):
-            ix = rowString.find(requiredPrefix)
-            if (ix != 0):
+            if not rowString.startswith(requiredPrefix):
                 expl = "Required prefix '%s' was not found in '%s'" % (requiredPrefix, rowString)
                 raise SubstringNotFoundException(expl)
             rowString = rowString.partition(requiredPrefix)[2]
