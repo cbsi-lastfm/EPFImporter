@@ -34,12 +34,11 @@
 # OF THE APPLE SOFTWARE, HOWEVER CAUSED AND WHETHER UNDER THEORY OF CONTRACT, TORT
 # (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-import bz2
 import datetime
-import io
 import os
 import re
 import logging
+import subprocess
 
 LOGGER = logging.getLogger()
 
@@ -89,10 +88,12 @@ class Parser(object):
         self.recordDelim = recordDelim
         self.fieldDelim = fieldDelim
 
-        # TODO: we need async-files here to make tarfile async
-        self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
-        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
-        self.eFile = bz2.open(self.rawFile, 'rb')
+        # self.bzFile = io.open(filePath, mode='rb', buffering=102400) # 100k is bzip's minimum block size
+        # self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
+        # self.eFile = bz2.open(self.rawFile, 'rb')
+
+        self.process = subprocess.Popen(['bunzip2', '-c', filePath], stdout=subprocess.PIPE, bufsize=16384)
+        self.eFile = self.process.stdout
         self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         self.fileSize = os.path.getsize(filePath)
@@ -128,19 +129,6 @@ class Parser(object):
                 self.dataTypes = ['DECIMAL(11,3)' if dt == 'DECIMAL(9,3)' else dt for dt in dts]
             elif aRow.startswith(exStart):
                 self.exportMode = self.splitRow(aRow, requiredPrefix=exStart)[0]
-
-        # Close and reopen as we don't have seek for a streams - and don't need it.
-        # self.eFile.seek(0, os.SEEK_SET) #seek back to the beginning
-        self.eFile.close()
-        self.rawFile.close()
-        self.eFile = None
-        self.rawFile = None
-        self.bzFile = None
-
-        self.bzFile = io.open(filePath, mode='rb', buffering=102400*10) # 100k is bzip's minimum block size, but load more anyway
-        self.rawFile = io.BufferedReader(self.bzFile, buffer_size=102400)
-        self.eFile = bz2.open(self.rawFile, 'rb')
-        self.eFile.read(TAR_HEADER_SIZE)  # skip tarfile header
 
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
@@ -188,11 +176,11 @@ class Parser(object):
 
         N.B. with tbz streams, "0" is actually at 512.
         """
+        if (recordNum <= 0):
+            return
         if self.seekPos != TAR_HEADER_SIZE:
             self.seekPos = TAR_HEADER_SIZE
         self.latestRecordNum = 0
-        if (recordNum <= 0):
-            return
         for j in range(recordNum):
             self.advanceToNextRecord()
 
@@ -210,23 +198,22 @@ class Parser(object):
         """
         lst = []
         isFirstLine = True
-        while (True):
+        while True:
             ln = self.eFile.readline()
-            if (not ln or len(ln) == 0 or ln[0] == "\x00"): #end of file - skipping zero-fill at the end of tarfile
+            if not ln or ln == b'' or ln[0] == 0: #end of file - skipping zero-fill at the end of tarfile
                 break
-            ln = ln.decode("utf-8")
-            if (isFirstLine and ignoreComments and (ln.startswith(self.commentChar) or ln.startswith("\x00"))): #comment
+            if chr(ln[0]) == self.commentChar and isFirstLine and ignoreComments: #comment
                 continue
             lst.append(ln)
             if isFirstLine:
                 isFirstLine = False
-            if (ln.find(self.recordDelim) != -1): #last textual line of this record
+            if ln.endswith(bytes(self.recordDelim, 'utf-8')): #last textual line of this record
                 break
         if (len(lst) == 0):
             return None
         else:
-            rowString = "".join(lst) #concatenate the lines into a single string, which is the full content of the row
-            return rowString
+            rowString = b''.join(lst) #concatenate the lines into a single string, which is the full content of the row
+            return str(rowString, 'utf-8')
 
 
     def advanceToNextRecord(self):
@@ -235,7 +222,7 @@ class Parser(object):
         This allows much faster access to a record in the middle of the file.
         """
         while (True):
-            ln = self.eFile.readline().decode("utf-8")
+            ln = str(self.eFile.readline(), "utf-8")
             if (not ln): #end of file
                 return
             if (ln.find(self.commentChar) == 0): #comment; always skip
@@ -309,6 +296,11 @@ class Parser(object):
                     # we've seen at least one integer field in a file with square brackets around it. Remove.
                     # r'[^0-9.-]'
                     rec[j] = self.nonNumberMatch.sub('', rec[j])
+                    if rec[j] == '':
+                        # Have seen at least one instance of the text "<UnknownKeyException>" in a column.
+                        # lost cause - just skip the record entirely.
+                        LOGGER.warning("Skipping record %i because it is malformed", self.latestRecordNum)
+                        return self.nextRecord()
 
             return rec
         else:

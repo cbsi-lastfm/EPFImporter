@@ -223,7 +223,9 @@ class Ingester(object):
             #If there are a large number of records, it's much faster to do a prune-and-merge technique;
             #for fewer records, it's faster to update the existing table.
             try:
-                if self.parser.recordsExpected < 500000: #update table in place
+                # XXX: we always update in place. because collection_price REFUSES to be union merged in Postgres
+                #      ... takes 3 hours to create the union table before failing. Update in place is always faster.
+                if self.isPostgresql or self.parser.recordsExpected < 500000: #update table in place
                     self._populateTable(self.tableName,
                                     resumeNum=fromRecord,
                                     isIncremental=True,
@@ -414,7 +416,7 @@ class Ingester(object):
         commandString = ("REPLACE" if (isIncremental and self.isMysql) else "INSERT")
         ignoreString = ("IGNORE" if (skipKeyViolators and not isIncremental and self.isMysql) else "")
         colNamesStr = "(%s)" % (", ".join(self.parser.columnNames))
-        exStrTemplate = f"""{commandString} {ignoreString} INTO {tableName} {colNamesStr} VALUES %s"""
+        exStrTemplate = f"""{commandString} {ignoreString} INTO {tableName} {colNamesStr} VALUES"""
 
         # Psycopg2 async helpers. (They don't need to be >here< here, but they're not used anywhere else)
 
@@ -504,35 +506,34 @@ class Ingester(object):
             if self.isMysql:
                 cur = conn.cursor()
 
-            colVals = f"({'), ('.join(stringList)})"
-            exStr = exStrTemplate % (colVals,)
+            exStr = f"{exStrTemplate} ({'), ('.join(stringList)})"
 
             try:
                 if self.isPostgresql:
-                    wait(conns[conn_idx])
+                    while True:
+                        state = conns[conn_idx].poll()
+                        if state == psycopg2.extensions.POLL_OK:
+                            break
+                        conn_idx += 1
+                        conn_idx = conn_idx % 8
                     curs[conn_idx].execute(exStr)
                 else:
                     cur.execute(exStr)
             except (MySQLdb.Warning, psycopg2.Warning) as e:
                 LOGGER.warning(str(e))
             except (MySQLdb.IntegrityError, psycopg2.IntegrityError) as e:
-            #This is likely a primary key constraint violation; should only be hit if skipKeyViolators is False
+                # This is likely a primary key constraint violation; should only be hit if skipKeyViolators is False
                 LOGGER.error(str(e))
             except (MySQLdb.Error, psycopg2.Error):
                 LOGGER.error("error executing %s" % exStr)
-                raise #re-raise the exception
-
-            if self.isPostgresql:
-                conn_idx += 1
-                conn_idx = conn_idx % 8
+                raise  # re-raise the exception
 
             self.lastRecordIngested = self.parser.latestRecordNum
             recCheck = self._checkProgress()
             if recCheck:
                 LOGGER.info(
-                    "...at record %i (%f%%)...",
-                    recCheck,
-                    (self.parser.bzFile.tell() / self.parser.fileSize) * 100
+                    "...at record %i...",
+                    recCheck
                 )
 
         if self.isPostgresql:
@@ -649,7 +650,6 @@ class Ingester(object):
         cur.execute("""DROP TABLE IF EXISTS %s""" % self.unionTableName)
 
         if self.isPostgresql:
-            cur.execute("SET work_mem TO '16GB'")  # some union tables need a LOT of RAM
             exStr = """CREATE TABLE %s AS %s""" % (self.unionTableName, self._incrementalUnionString())
         else:
             exStr = """CREATE TABLE %s %s""" % (self.unionTableName, self._incrementalUnionString())
