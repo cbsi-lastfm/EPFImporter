@@ -541,6 +541,8 @@ class Ingester(object):
                 try:
                     wait(conns[i])
                 except:
+                    # don't fail a whole import if one of the final batches contained a key constraint failure.
+                    # this matches the behaviour in the try/except LOGGER.warning block above.
                     pass
                 conns[i].close()
 
