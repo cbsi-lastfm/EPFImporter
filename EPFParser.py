@@ -146,7 +146,7 @@ class Parser(object):
         self.typeMap = dict(zip(self.columnNames, self.dataTypes))
 
         # used in nextRecord
-        self.nonNumberMatch = re.compile(r'[^0-9.-]')
+        self.nonNumberMatch = re.compile(r'[^0-9.-]+')
 
 
     def setSeekPos(self, pos=0):
