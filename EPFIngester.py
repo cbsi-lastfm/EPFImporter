@@ -537,22 +537,12 @@ class Ingester(object):
                 )
 
         if self.isPostgresql:
-            wait(conns[0])
-            conns[0].close()
-            wait(conns[1])
-            conns[1].close()
-            wait(conns[2])
-            conns[2].close()
-            wait(conns[3])
-            conns[3].close()
-            wait(conns[4])
-            conns[4].close()
-            wait(conns[5])
-            conns[5].close()
-            wait(conns[6])
-            conns[6].close()
-            wait(conns[7])
-            conns[7].close()
+            for i in range(0, 7):
+                try:
+                    wait(conns[i])
+                except:
+                    pass
+                conns[i].close()
 
             dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
             exStr = dropRuleTemplate % (tableName, tableName)
