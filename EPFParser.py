@@ -146,7 +146,7 @@ class Parser(object):
         self.typeMap = dict(zip(self.columnNames, self.dataTypes))
 
         # used in nextRecord
-        self.nonNumberMatch = re.compile(r'[^0-9.-]')
+        self.nonNumberMatch = re.compile(r'[^0-9.-]+')
 
 
     def setSeekPos(self, pos=0):
@@ -262,7 +262,7 @@ class Parser(object):
             #replace empty strings with None
             for i in range(len(rec)):
                 val = rec[i]
-                rec[i] = (None if val == "" else val)
+                rec[i] = (None if val == "" and i not in self.primaryKeyIndexes else val)
 
             #massage dates into MySQL-compatible format.
             #most date values look like '2009 06 21'; some are '2005-09-06-00:00:00-Etc/GMT'
