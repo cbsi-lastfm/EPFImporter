@@ -537,19 +537,19 @@ class Ingester(object):
                 )
 
         if self.isPostgresql:
-            for i in range(0, 7):
+            for conn in conns:
                 try:
-                    wait(conns[i])
+                    wait(conn)
                 except:
                     # don't fail a whole import if one of the final batches contained a key constraint failure.
                     # this matches the behaviour in the try/except LOGGER.warning block above.
                     pass
-                conns[i].close()
+                conn.close()
 
             dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
             exStr = dropRuleTemplate % (tableName, tableName)
             conn = self.connect()
-            cur = conn.cursor()
+            cur     = conn.cursor()
             cur.execute(exStr)
             conn.commit()
 
