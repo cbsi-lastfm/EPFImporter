@@ -593,14 +593,7 @@ class Ingester(object):
                 conn = self.connect()
                 cur = conn.cursor()
                 LOGGER.info("Creating custom artist_collection index")
-                try:
-                    cur.execute(f"""CREATE INDEX ON {tableName} (collection_id)""")
-                except:
-                    # If index already exists, this is fine.
-                    # We're not using CREATE TABLE IF NOT EXISTS here because it requires us to define an index name
-                    # And that means we would need to manually rename the index when we do the table swap.
-                    LOGGER.info("Index already exists.")
-                    pass
+                cur.execute(f"""CREATE INDEX IF NOT EXISTS collection_id_idx ON {tableName} (collection_id)""")
                 conn.commit()
                 conn.close()
 
@@ -608,14 +601,7 @@ class Ingester(object):
                 conn = self.connect()
                 cur = conn.cursor()
                 LOGGER.info(f"Creating custom {fileName} index")
-                try:
-                    cur.execute(f"""CREATE INDEX ON {tableName} (lower(name) text_pattern_ops)""")
-                except:
-                    # If index already exists, this is fine.
-                    # We're not using CREATE TABLE IF NOT EXISTS here because it requires us to define an index name
-                    # And that means we would need to manually rename the index when we do the table swap.
-                    LOGGER.info("Index already exists.")
-                    pass
+                cur.execute(f"""CREATE INDEX IF NOT EXISTS {fileName}_lower_idx ON {tableName} (lower(name) text_pattern_ops)""")
                 conn.commit()
                 conn.close()
 
