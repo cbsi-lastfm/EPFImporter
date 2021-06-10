@@ -551,10 +551,14 @@ class Ingester(object):
             conn = self.connect()
             cur = conn.cursor()
             cur.execute(exStr)
+            LOGGER.info("Analyzing table")
+            cur.execute(f"""ANALYZE {tableName}""")
             conn.commit()
 
-        conn.close()
         LOGGER.info("Ingested %i records", self.lastRecordIngested)
+        conn.close()
+
+        self._createCustomIndexes(self.fileName.split(".")[0], tableName)
 
 
     def _checkProgress(self, recordGap=5000, timeGap=datetime.timedelta(0, 120, 0)):
@@ -581,6 +585,25 @@ class Ingester(object):
         if self.isPostgresql:
             conn.commit()
         conn.close()
+
+
+    def _createCustomIndexes(self, fileName, tableName):
+        if self.isPostgresql:
+            if fileName == "artist_collection":
+                conn = self.connect()
+                cur = conn.cursor()
+                LOGGER.info("Creating custom artist_collection index")
+                cur.execute(f"""CREATE INDEX IF NOT EXISTS collection_id_idx ON {tableName} (collection_id)""")
+                conn.commit()
+                conn.close()
+
+            if fileName in ("collection", "artist"):
+                conn = self.connect()
+                cur = conn.cursor()
+                LOGGER.info(f"Creating custom {fileName} index")
+                cur.execute(f"""CREATE INDEX IF NOT EXISTS {fileName}_lower_idx ON {tableName} (lower(name) text_pattern_ops)""")
+                conn.commit()
+                conn.close()
 
 
     def _renameAndDrop(self, sourceTable, targetTable):
