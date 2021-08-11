@@ -588,20 +588,20 @@ class Ingester(object):
 
 
     def _createCustomIndexes(self, fileName, tableName):
+        # fileName here is pretty much the "final" table name in DB.
+        # tableName is the name of the temporary table being used for loading.
         if self.isPostgresql:
-            if fileName == "artist_collection":
-                conn = self.connect()
-                cur = conn.cursor()
-                LOGGER.info("Creating custom artist_collection index")
-                cur.execute(f"""CREATE INDEX IF NOT EXISTS collection_id_idx ON {tableName} (collection_id)""")
-                conn.commit()
-                conn.close()
-
-            if fileName in ("collection", "artist"):
+            custom_indexes_sql = {
+                'artist_collection': f'CREATE INDEX ON {tableName} (collection_id)',
+                'collection': f'CREATE INDEX ON {tableName} (lower(name) text_pattern_ops)',
+                'artist': f'CREATE INDEX ON {tableName} (lower(name) text_pattern_ops)',
+            }
+            sql = custom_indexes_sql.get(fileName)
+            if sql:
                 conn = self.connect()
                 cur = conn.cursor()
                 LOGGER.info(f"Creating custom {fileName} index")
-                cur.execute(f"""CREATE INDEX IF NOT EXISTS {fileName}_lower_idx ON {tableName} (lower(name) text_pattern_ops)""")
+                cur.execute(sql)
                 conn.commit()
                 conn.close()
 
