@@ -130,6 +130,8 @@ class Parser(object):
             elif aRow.startswith(exStart):
                 self.exportMode = self.splitRow(aRow, requiredPrefix=exStart)[0]
 
+        self.fixupDataTypes()
+
         for pk in self.primaryKey:
             self.primaryKeyIndexes.append(self.columnNames.index(pk))
 
@@ -147,6 +149,19 @@ class Parser(object):
 
         # used in nextRecord
         self.nonNumberMatch = re.compile(r'[^0-9.-]+')
+
+
+    def fixupDataTypes(self):
+        """Fixup data types for Apple bug."""
+        for index, (column, dbType) in enumerate(zip(self.columnNames, self.dataTypes)):
+            if column == 'export_date':
+                self.dataTypes[index] = 'BIGINT'
+            elif column.endswith('_date'):
+                self.dataTypes[index] = 'DATETIME'
+            elif column.endswith('_id') and dbType not in ('INTEGER', 'BIGINT'):
+                self.dataTypes[index] = 'BIGINT'
+            elif column.startswith('is_'):
+                self.dataTypes[index] = 'BOOLEAN'
 
 
     def setSeekPos(self, pos=0):

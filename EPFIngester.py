@@ -137,6 +137,8 @@ class Ingester(object):
             self.ingestIncremental(skipKeyViolators=skipKeyViolators)
         else:
             self.ingestFull(skipKeyViolators=skipKeyViolators)
+        self.parser.eFile.close()
+        self.parser.process.poll()
 
 
     def ingestFull(self, skipKeyViolators=False):
