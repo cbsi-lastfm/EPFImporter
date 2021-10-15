@@ -137,6 +137,8 @@ class Ingester(object):
             self.ingestIncremental(skipKeyViolators=skipKeyViolators)
         else:
             self.ingestFull(skipKeyViolators=skipKeyViolators)
+        self.parser.eFile.close()
+        self.parser.process.poll()
 
 
     def ingestFull(self, skipKeyViolators=False):
@@ -416,6 +418,8 @@ class Ingester(object):
         commandString = ("REPLACE" if (isIncremental and self.isMysql) else "INSERT")
         ignoreString = ("IGNORE" if (skipKeyViolators and not isIncremental and self.isMysql) else "")
         colNamesStr = "(%s)" % (", ".join(self.parser.columnNames))
+        conflictStr = (f' ON CONFLICT ({",".join(self.parser.primaryKey)}) DO NOTHING'
+                       if self.isPostgresql and skipKeyViolators else '')
         exStrTemplate = f"""{commandString} {ignoreString} INTO {tableName} {colNamesStr} VALUES"""
 
         # Psycopg2 async helpers. (They don't need to be >here< here, but they're not used anywhere else)
@@ -450,45 +454,11 @@ class Ingester(object):
 
         self.parser.seekToRecord(resumeNum) #advance to resumeNum
         if self.isPostgresql:
-            conn = self.connect()
-            psycopg2_async_set_client_encoding(conn, 'UTF8')
-            cur = conn.cursor()
-            createRuleTemplate = """CREATE OR REPLACE RULE %s_on_duplicate_ignore AS ON INSERT TO %s WHERE EXISTS(SELECT 1 FROM %s WHERE (%s) = (%s)) DO INSTEAD NOTHING"""
-            pkLst = self.parser.primaryKey
-            if len(pkLst) > 0:
-                pk1 = ", ".join(pkLst)
-                pk2 = ", ".join(["NEW.%s" % pk for pk in pkLst])
-            else:
-                pk1 = "1"
-                pk2 = "1"
-
-            exStr = createRuleTemplate % (tableName, tableName, tableName, pk1, pk2)
-            cur.execute(exStr)
-            conn.commit()
-            conn.close()
-
-            # open 4 concurrent connections
             conn_idx = 0
-            conns = [
-                self.connect(async_=1),
-                self.connect(async_=1),
-                self.connect(async_=1),
-                self.connect(async_=1),
-                self.connect(async_=1),
-                self.connect(async_=1),
-                self.connect(async_=1),
-                self.connect(async_=1),
-            ]
-            curs = [
-                conns[0].cursor(),
-                conns[1].cursor(),
-                conns[2].cursor(),
-                conns[3].cursor(),
-                conns[4].cursor(),
-                conns[5].cursor(),
-                conns[6].cursor(),
-                conns[7].cursor(),
-            ]
+            conns = [self.connect(async_=1) for _ in range(8)]
+            for conn in conns:
+                psycopg2_async_set_client_encoding(conn, 'UTF8')
+            curs = [conn.cursor() for conn in conns]
         else:
             conn = self.connect()
 
@@ -506,7 +476,7 @@ class Ingester(object):
             if self.isMysql:
                 cur = conn.cursor()
 
-            exStr = f"{exStrTemplate} ({'), ('.join(stringList)})"
+            exStr = f"{exStrTemplate} ({'), ('.join(stringList)}){conflictStr}"
 
             try:
                 if self.isPostgresql:
@@ -545,21 +515,17 @@ class Ingester(object):
                     # this matches the behaviour in the try/except LOGGER.warning block above.
                     pass
                 conn.close()
-
-            dropRuleTemplate = """DROP RULE %s_on_duplicate_ignore ON %s"""
-            exStr = dropRuleTemplate % (tableName, tableName)
             conn = self.connect()
-            cur = conn.cursor()
-            cur.execute(exStr)
-            LOGGER.info("Analyzing table")
-            cur.execute(f"""ANALYZE {tableName}""")
-            conn.commit()
 
         LOGGER.info("Ingested %i records", self.lastRecordIngested)
-        conn.close()
-
         self._createCustomIndexes(self.fileName.split(".")[0], tableName)
 
+        LOGGER.info("Analyzing table")
+        cur = conn.cursor()
+        cur.execute(f'ANALYZE {tableName}')
+        conn.commit()
+
+        conn.close()
 
     def _checkProgress(self, recordGap=5000, timeGap=datetime.timedelta(0, 120, 0)):
         """
