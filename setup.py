@@ -10,7 +10,7 @@ setup(
                      'available to EPF partners, into a relational database.',
     install_requires=[
         'configparser==5.0.2',
-        'PyMySQL==1.0.2',
+        'PyMySQL==1.1.1',
         'psycopg2cffi==2.9.0',
     ],
 )
